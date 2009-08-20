@@ -1,0 +1,4 @@
+Logtilla is a web access log analyzer.
+
+It consists of a log parser program written in C, and communicating
+using ASN.1 with a log analysis framework in Erlang.
