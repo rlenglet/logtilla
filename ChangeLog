@@ -1,4 +1,53 @@
-2009-08-20  Romain Lenglet  <romain.lenglet@laposte.net>
+2009-09-13  Romain Lenglet  <romain.lenglet@berabera.info>
+
+	* src/gen_log_analyzer.erl, src/logtilla_test.erl: Added type
+	specifications and EDoc comments. Added the stop/1 function.
+	* src/Makefile.am: Generate doc files.
+
+2009-09-12  Romain Lenglet  <romain.lenglet@berabera.info>
+
+	* c_src/Makefile.am, c_src/logtilla_parser.c: Reimplement the
+	interactions with the parser to use ParseLogFile operations,
+	i.e. to receive ParseLogFile PDUs, send the log entries into
+	ReturnLogEntry PDUs, and return CannotOpenFile and EndOfFile PDUs.
+	* src/Makefile.am, src/gen_log_analyzer.erl,
+	src/logtilla_test.erl: Reimplement the interactions with the C
+	port program to perform ParseLogFile operations. Implement a
+	gen_server call to perform ParseLogFile operations. Add behaviour
+	callbacks for "pass-through" call/3 and cast/2 to modules.
+
+2009-09-08  Romain Lenglet  <romain.lenglet@berabera.info>
+
+	* asn1/WebAccessLogParserOperations.asn1, asn1/Makefile.am: Define
+	PDUs for the ParseLogFile operations: ParseLogFile,
+	CannotOpenFile, ReturnLogEntry, and EndOfFile.
+
+2009-08-31  Romain Lenglet  <romain.lenglet@berabera.info>
+
+	* src/Makefile.am, src/gen_log_analyzer.erl,
+	src/logtilla_test.erl: Define the gen_log_analyzer behaviour, and
+	refactor logtilla_test to use it.
+
+2009-08-30  Romain Lenglet  <romain.lenglet@berabera.info>
+
+	* asn1/WebAccessLog.asn1 (LogEntry), c_src/logtilla_parser.c,
+	src/logtilla_test.erl: Support parsing the combined log format in
+	addition to the common log format.
+
+	* asn1/WebAccessLog.asn1, asn1/Makefile.am, c_src/Makefile.am,
+	src/logtilla_test.erl, src/Makefile.am: Rename CommonLog.asn1 into
+	WebAccessLog.asn1.
+
+	* README: Mention support of combined log format.
+
+2009-08-24  Romain Lenglet  <romain.lenglet@berabera.info>
+
+	* c_src/logtilla_parser.c (alloc_parser_state, free_parser_state
+	parse_log_entry): Pre-allocate the octet strings and longs for
+	optional fields in LogEntry, instead of reallocating for each
+	entry.
+
+2009-08-20  Romain Lenglet  <romain.lenglet@berabera.info>
 
 	* Initial release.
 

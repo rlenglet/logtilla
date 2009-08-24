@@ -1,5 +1,5 @@
 # Copyright 2009 Google Inc.
-# Author: Romain Lenglet <romain.lenglet@laposte.net>
+# Author: Romain Lenglet <romain.lenglet@berabera.info>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 AC_PREREQ([2.60])
 
 AC_INIT([Logtilla], [1.0],
-	[romain.lenglet@laposte.net], [logtilla])
+	[romain.lenglet@berabera.info], [logtilla])
 AC_CONFIG_SRCDIR([ChangeLog])
 
 AM_INIT_AUTOMAKE([1.10])

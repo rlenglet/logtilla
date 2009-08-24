@@ -1,5 +1,5 @@
 # Copyright 2009 Google Inc.
-# Author: Romain Lenglet <romain.lenglet@laposte.net>
+# Author: Romain Lenglet <romain.lenglet@berabera.info>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,25 +13,44 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-erlasn1srcdir = $(ERLANG_INSTALL_LIB_DIR_logtilla)/src
-dist_erlasn1src_DATA = logtilla_test.erl
-nodist_erlasn1src_DATA = CommonLog.erl
+erlsrcdir = $(ERLANG_INSTALL_LIB_DIR_logtilla)/src
+dist_erlsrc_DATA = gen_log_analyzer.erl logtilla_test.erl
+nodist_erlsrc_DATA = WebAccessLogParserOperations.erl WebAccessLog.erl
 
-erlasn1incdir = $(ERLANG_INSTALL_LIB_DIR_logtilla)/include
-nodist_erlasn1inc_DATA = ../asn1/CommonLog.asn1 CommonLog.hrl CommonLog.asn1db
+erlincdir = $(ERLANG_INSTALL_LIB_DIR_logtilla)/include
+nodist_erlinc_DATA = ../asn1/WebAccessLogParserOperations.asn1 \
+WebAccessLogParserOperations.hrl WebAccessLogParserOperations.asn1db \
+../asn1/WebAccessLog.asn1 WebAccessLog.hrl WebAccessLog.asn1db 
 
-erlasn1beamdir = $(ERLANG_INSTALL_LIB_DIR_logtilla)/ebin
-nodist_erlasn1beam_DATA = logtilla_test.beam CommonLog.beam CommonLog.asn1db
+erlbeamdir = $(ERLANG_INSTALL_LIB_DIR_logtilla)/ebin
+nodist_erlbeam_DATA = gen_log_analyzer.beam logtilla_test.beam \
+WebAccessLog.beam WebAccessLog.asn1db
 
-logtilla_test.beam: CommonLog.hrl
+gen_log_analyzer.beam: WebAccessLogParserOperations.hrl
+logtilla_test.beam: WebAccessLog.hrl
 
-CLEANFILES = $(erlbeam_DATA) CommonLog.erl CommonLog.beam CommonLog.hrl \
-  CommonLog.asn1db
+CLEANFILES = $(nodist_erlbeam_DATA) WebAccessLogParserOperations.erl \
+WebAccessLogParserOperations.beam WebAccessLogParserOperations.hrl \
+WebAccessLogParserOperations.asn1db WebAccessLog.erl WebAccessLog.beam \
+WebAccessLog.hrl WebAccessLog.asn1db
+
+CLEANFILES += edoc-info erlang.png index.html modules-frame.html \
+overview-summary.html packages-frame.html stylesheet.css \
+gen_log_analyzer.html
 
 .erl.beam:
-	$(ERLC) $(ERLCFLAGS) -b beam $<
+	$(ERLC) $(ERLCFLAGS) -pa . -b beam $<
 
-CommonLog.erl CommonLog.beam CommonLog.hrl CommonLog.asn1db: ../asn1/CommonLog.asn1
+.erl.html:
+	$(ERL) -noshell -run edoc_run files "$<"
+
+WebAccessLogParserOperations.erl WebAccessLogParserOperations.beam \
+WebAccessLogParserOperations.hrl WebAccessLogParserOperations.asn1db: \
+../asn1/WebAccessLogParserOperations.asn1
 	$(ERLC) $(ERLCFLAGS) -b ber_bin +der +optimize +driver $<
 
-SUFFIXES = .erl .asn1 .beam .hrl .asn1db
+WebAccessLog.erl WebAccessLog.beam WebAccessLog.hrl WebAccessLog.asn1db: \
+../asn1/WebAccessLog.asn1
+	$(ERLC) $(ERLCFLAGS) -b ber_bin +der +optimize +driver $<
+
+SUFFIXES = .erl .asn1 .beam .hrl .asn1db .html

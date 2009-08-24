@@ -1,5 +1,5 @@
 # Copyright 2009 Google Inc.
-# Author: Romain Lenglet <romain.lenglet@laposte.net>
+# Author: Romain Lenglet <romain.lenglet@berabera.info>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,11 +24,15 @@ logtilla_parser_LDADD = libasn1c.a
 logtilla_parser.$(OBJEXT): LogEntry.h
 
 ASN1C_GENSOURCES = LogEntry.h LogEntry.c HTTPStatusCode.h HTTPStatusCode.c \
-  NetworkAddress.h NetworkAddress.c
+  NetworkAddress.h NetworkAddress.c \
+  CannotOpenFile.h CannotOpenFile.c ConsumerPDU.h ConsumerPDU.c \
+  EndOfFile.h EndOfFile.c ParseLogFile.h ParseLogFile.c \
+  ReturnLogEntry.h ReturnLogEntry.c SupplierPDU.h SupplierPDU.c
 CLEANFILES = $(ASN1C_GENSOURCES)
-$(ASN1C_GENSOURCES): ../asn1/CommonLog.asn1
-	$(ASN1C) -Werror -fnative-types -fno-include-deps -R $<
-#	$(ASN1C) -Werror -fnative-types -fno-include-deps -gen-PER -R $<
+$(ASN1C_GENSOURCES): ../asn1/WebAccessLogParserOperations.asn1 \
+../asn1/WebAccessLog.asn1
+	$(ASN1C) -fcompound-names -Werror -fnative-types -fno-include-deps -R $?
+#	$(ASN1C) -Werror -fnative-types -fno-include-deps -gen-PER -R $?
 
 # Build a static library from asn1c's sources.
 libasn1c.a: @ASN1C_SKEL_OBJS@

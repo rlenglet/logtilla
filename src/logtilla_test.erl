@@ -1,5 +1,6 @@
 %% @copyright 2009 Google Inc.
-%% @author Romain Lenglet <romain.lenglet@laposte.net>
+%% @author Romain Lenglet <romain.lenglet@berabera.info>
+%%   [http://www.berabera.info/]
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -13,58 +14,58 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
-%% A basic module for testing the basic mechanisms for interacting
-%% with the logtilla_parser port program.
+%% @private
 
-%% TODO(Romain): Extend and refactor this module to define an Erlang
-%% behaviour for log entry analysis, and for using operations ala
-%% ROSE/CIMP, using linked replies, etc. to interact with the port
-%% program.
+%% @doc A basic module for testing the basic mechanisms for
+%% using the gen_log_analyzer behaviour.
 
 -module(logtilla_test).
--export([start/1]).
--export([init/2]).
+-behaviour(gen_log_analyzer).
 
--include("CommonLog.hrl").
+-export([start_link/0, get_stats/1]).
 
-start(Name) ->
-    case whereis(Name) of
-	undefined ->
-	    Self = self(),
-	    Pid = spawn_link(fun() -> init(Self, Name) end),
-	    receive
-		started -> Pid;
-		quit -> ok
-	    end;
-	_ -> {already_started, Name}
-    end.
-			  
-init(Client, Name) ->
-    process_flag(trap_exit, true),
-    register(Name, self()),
-    Client ! started,
-    Port = start_logtilla_parser(),
-    read_log(Port).
+% Functions implementing the gen_log_analyzer behaviour:
+-export([init/1, handle_log_entry/2, handle_call/3, handle_cast/2, terminate/2,
+	 code_change/3]).
 
-start_logtilla_parser() ->
-    open_port({spawn, "logtilla-parser"},
-	      [{packet, 2}, binary, exit_status]).
+-include("WebAccessLog.hrl").
 
-read_log(Port) ->
-    receive
-	{Port, {data, Data}} ->
-	    handle_log_entry(Data),
-	    read_log(Port);
-	{'EXIT', Port, Reason} ->
-	    process_flag(trap_exit, false),
-	    exit({port_died, Reason})
-    end.
+-record(state, {count_without_length=0, count_with_length=0}).
 
-handle_log_entry(Data) ->  %% TODO(Romain): Make generic behaviour callbacks.
-    {ok, LogEntry} = 'CommonLog':decode('LogEntry', Data),
-    %% Example of filtering / Map:
-    Time = LogEntry#'LogEntry'.time,
+
+start_link() ->
+    gen_log_analyzer:start_link(?MODULE, [], []).
+
+get_stats(Name) ->
+    gen_log_analyzer:call(Name, get_stats).
+
+init([]) ->
+    State = #state{},
+    {ok, State}.
+
+handle_log_entry(LogEntry, State) ->
+    % Example of filtering:
     case LogEntry#'LogEntry'.length of
-	asn1_NOVALUE -> io:format("~s: no length~n", [Time]);
-	Length -> io:format("~s: ~w~n", [Time, Length])
+	asn1_NOVALUE ->
+	    {ok, State#state{
+		   count_without_length=State#state.count_without_length+1}};
+	_Length ->
+	    {ok, State#state{
+		   count_with_length=State#state.count_with_length+1}}
     end.
+
+handle_call(get_stats, _, State) ->
+    {reply, {State#state.count_without_length, State#state.count_with_length},
+     State}.
+
+handle_cast(_, State) ->
+    {noreply, State}.
+
+terminate(_Reason, State) ->
+    io:format("without length=~w; with length=~w~n",
+	      [State#state.count_without_length,
+	       State#state.count_with_length]),
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.

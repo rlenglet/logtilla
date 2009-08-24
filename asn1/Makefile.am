@@ -1,5 +1,5 @@
-# Copyright 2009 Google Inc.                                                           
-# Author: Romain Lenglet <romain.lenglet@laposte.net>
+# Copyright 2009 Google Inc.
+# Author: Romain Lenglet <romain.lenglet@berabera.info>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,4 +14,4 @@
 # limitations under the License.
 
 asn1dir =
-dist_asn1_DATA = CommonLog.asn1
+dist_asn1_DATA = WebAccessLog.asn1 WebAccessLogParserOperations.asn1

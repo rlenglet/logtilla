@@ -1,5 +1,5 @@
 // Copyright 2009 Google Inc.
-// Author: Romain Lenglet <romain.lenglet@laposte.net>
+// Author: Romain Lenglet <romain.lenglet@berabera.info>
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,17 +23,70 @@
 #include <stdio.h>
 #include <time.h>
 
-#include "LogEntry.h"
+#include "ConsumerPDU.h"
+#include "SupplierPDU.h"
+
+static FILE *LOGFILE;
+#define LOG(f, a) fprintf(LOGFILE, f, a); fflush(LOGFILE)
+
+int send_supplier_pdu(SupplierPDU_t *supplier_pdu, FILE *output, int flush) {
+  char output_header_buffer[2] = {0, 0};
+  char output_buffer[2048];
+  asn_enc_rval_t enc_ret;
+
+  // Encode the PDU using BER and write it out:
+  enc_ret = der_encode_to_buffer(&asn_DEF_SupplierPDU, supplier_pdu,
+				 output_buffer, 2048);
+  if (enc_ret.encoded == -1) {
+    goto error;
+  }
+
+  // Write out the size of the packet as a 16-bit integer:
+  output_header_buffer[0] = (enc_ret.encoded >> 8) & 0xff;
+  output_header_buffer[1] = enc_ret.encoded & 0xff;
+  fwrite(output_header_buffer, 2, 1, stdout);
+  // Write out the data:
+  fwrite(output_buffer, enc_ret.encoded, 1, output);
+
+  if (flush) {
+    fflush(stdout);
+  }
+  return 0;
+
+ error:
+  fflush(stdout);
+  return 1;
+}
 
 typedef struct {
-  regex_t common_log_entry_regex;
+  regex_t combined_log_entry_regex;
   regex_t ip_address_regex;
+  // The PDU to return a LogEntry which fields are set by the parser:
+  SupplierPDU_t supplier_pdu;
+  // Pre-allocated optional fields in the LogEntry for the common log format:
+  UTF8String_t *client_identity;
+  UTF8String_t *auth_user;
+  long *length;
+  // Pre-allocated optional fields in the LogEntry for the combined log format:
+  UTF8String_t *referrer;
+  UTF8String_t *user_agent;
 } parser_state_t;
 
-#define COMMON_LOG_ENTRY_REGEX "\\([^ ]\\+\\) \\(-\\|\"[^ ]*\"\\) \\(-\\|\"[^ ]*\"\\) \\[\\([0-9]\\{2\\}\\)/\\([A-Za-z]\\{3\\}\\)/\\([0-9]\\{4\\}\\):\\([0-9]\\{2\\}\\):\\([0-9]\\{2\\}\\):\\([0-9]\\{2\\}\\) \\([+-][0-9]\\{4\\}\\)\\] \"\\([^\"]*\\)\" \\([0-9]\\+\\) \\(-\\|[0-9]\\+\\)"
+/**
+ * The regular expression used for parsing log entries in either the
+ * common log format or the combined log format.
+ */
+#define COMBINED_LOG_ENTRY_REGEX "\\([^ ]\\+\\) \\(-\\|\"[^\"]*\"\\) \\(-\\|\"[^\"]*\"\\) \\[\\([0-9]\\{2\\}\\)/\\([A-Za-z]\\{3\\}\\)/\\([0-9]\\{4\\}\\):\\([0-9]\\{2\\}\\):\\([0-9]\\{2\\}\\):\\([0-9]\\{2\\}\\) \\([+-][0-9]\\{4\\}\\)\\] \"\\([^\"]*\\)\" \\([0-9]\\+\\) \\(-\\|[0-9]\\+\\) \\(\"\\([^\"]*\\)\" \"\\([^\"]*\\)\"\\)\\?"
 
+/**
+ * The regular expression used for parsing IPv4 addresses.
+ */
 #define IP_ADDRESS_REGEX "\\([0-9]\\{1,3\\}\\)\\.\\([0-9]\\{1,3\\}\\)\\.\\([0-9]\\{1,3\\}\\)\\.\\([0-9]\\{1,3\\}\\)"
 
+/**
+ * Maps month name 3-letter abbrevations to numbers as a 2-letter
+ * strings.
+ */
 static char* MONTHS[12][2] = {
   {"Jan", "01"},
   {"Feb", "02"},
@@ -49,22 +102,93 @@ static char* MONTHS[12][2] = {
   {"Dec", "12"}
 };
 
-int init_parser_state(parser_state_t *parser_state) {
+parser_state_t* alloc_parser_state() {
+  parser_state_t* parser_state = NULL;
+  char FIXME_BUFFER[2048];
 
-  if (regcomp(&parser_state->common_log_entry_regex,
-	      COMMON_LOG_ENTRY_REGEX, 0)) {
-    return 1;
+  parser_state = (parser_state_t*)calloc(1, sizeof(parser_state_t));
+  if (!parser_state) {
+    goto error;
+  }
+
+  if (regcomp(&parser_state->combined_log_entry_regex,
+	      COMBINED_LOG_ENTRY_REGEX, 0)) {
+    goto error;
   }
 
   if (regcomp(&parser_state->ip_address_regex, IP_ADDRESS_REGEX, 0)) {
-    return 1;
+    goto error;
   }
 
-  return 0;
+  parser_state->client_identity =
+    OCTET_STRING_new_fromBuf(&asn_DEF_UTF8String, NULL, -1);
+  if (!parser_state->client_identity) {
+    goto error;
+  }
+
+  parser_state->auth_user =
+    OCTET_STRING_new_fromBuf(&asn_DEF_UTF8String, NULL, -1);
+  if (!parser_state->auth_user) {
+    goto error;
+  }
+
+  parser_state->length = (long*)calloc(1, sizeof(long));
+  if (!parser_state->length) {
+    goto error;
+  }
+
+  parser_state->referrer =
+    OCTET_STRING_new_fromBuf(&asn_DEF_UTF8String, NULL, -1);
+  if (!parser_state->referrer) {
+    goto error;
+  }
+
+  parser_state->user_agent =
+    OCTET_STRING_new_fromBuf(&asn_DEF_UTF8String, NULL, -1);
+  if (!parser_state->user_agent) {
+    goto error;
+  }
+
+  return parser_state;
+
+ error:
+  if (parser_state) {
+    regfree(&parser_state->combined_log_entry_regex);
+    regfree(&parser_state->ip_address_regex);
+    if (parser_state->client_identity) {
+      free(parser_state->client_identity);
+    }
+    if (parser_state->auth_user) {
+      free(parser_state->auth_user);
+    }
+    if (parser_state->length) {
+      free(parser_state->length);
+    }
+    if (parser_state->referrer) {
+      free(parser_state->referrer);
+    }
+    if (parser_state->user_agent) {
+      free(parser_state->user_agent);
+    }
+    free(parser_state);
+    return NULL;
+  }
+    
 }
 
-// TODO(Romain): Add a function to call
-// regfree(&common_log_entry_regex) etc.
+void free_parser_state(parser_state_t *parser_state) {
+  LogEntry_t *log_entry =
+    &parser_state->supplier_pdu.choice.return_log_entry.argument;
+  regfree(&parser_state->combined_log_entry_regex);
+  regfree(&parser_state->ip_address_regex);
+  log_entry->client_identity = parser_state->client_identity;
+  log_entry->auth_user = parser_state->auth_user;
+  log_entry->length = parser_state->length;
+  log_entry->referrer = parser_state->referrer;
+  log_entry->user_agent = parser_state->user_agent;
+  ASN_STRUCT_FREE_CONTENTS_ONLY(asn_DEF_LogEntry, log_entry);
+  free(parser_state);
+}
 
 int parse_network_address(parser_state_t *parser_state, char *start_ptr,
 			  char *end_ptr, NetworkAddress_t *network_address) {
@@ -94,27 +218,24 @@ int parse_network_address(parser_state_t *parser_state, char *start_ptr,
 }
 
 int parse_optional_name(parser_state_t *parser_state, char *start_ptr,
-			char *end_ptr, UTF8String_t **name) {
+			char *end_ptr, UTF8String_t **name,
+			UTF8String_t *preallocated_string, int strip_quotes) {
   char *c;
-  if (((end_ptr-start_ptr) == 1) && (*start_ptr == '-')) {
-    if (*name != NULL) {
-      ASN_STRUCT_FREE(asn_DEF_UTF8String, *name);
-      *name = NULL;
-    }
+  if (((end_ptr-start_ptr) == 1) && (*start_ptr == '-')) {    
+    // Don't worry about free()ing the pointer, since it is always referrenced
+    // preallocated_string or NULL:
+    *name = NULL;
   } else {
-    // Ignore surrounding double quotes:
-    ++start_ptr;
-    --end_ptr;
-    if (*name == NULL) {
-      *name = OCTET_STRING_new_fromBuf(&asn_DEF_UTF8String,
-				       start_ptr, (end_ptr-start_ptr));
-      if (!*name) {
-	return 1;
-      }
-    } else {
-      if (OCTET_STRING_fromBuf(*name, start_ptr, (end_ptr-start_ptr))) {
-	return 1;
-      }
+    if (strip_quotes) {
+      // Ignore surrounding double quotes:
+      ++start_ptr;
+      --end_ptr;
+    }
+    // Don't worry about free()ing the pointer, since it is always referrenced
+    // preallocated_string or NULL:
+    *name = preallocated_string;
+    if (OCTET_STRING_fromBuf(*name, start_ptr, (end_ptr-start_ptr))) {
+      return 1;
     }
   }
   return 0;
@@ -171,17 +292,21 @@ int parse_time(parser_state_t *parser_state, char *line, regmatch_t *matched,
   return 0;
 }
 
-int parse_common_log_entry(parser_state_t *parser_state, char *line,
-			   LogEntry_t *log_entry) {
-  int matched_count = 14;
+int parse_log_entry(parser_state_t *parser_state, char *line) {
+  LogEntry_t *log_entry =
+    &parser_state->supplier_pdu.choice.return_log_entry.argument;
+  int matched_count = 17;
   regmatch_t matched[matched_count];
   char *start_ptr;
   char *end_ptr;
 
-  if (regexec(&(parser_state->common_log_entry_regex), line,
+  if (regexec(&(parser_state->combined_log_entry_regex), line,
 	      matched_count, matched, 0)) {
     return 1;
   }
+
+  // Parse the fields that are defined both in the common log format
+  // and the combined format:
 
   start_ptr = &line[matched[1].rm_so];
   end_ptr = &line[matched[1].rm_eo];
@@ -193,14 +318,16 @@ int parse_common_log_entry(parser_state_t *parser_state, char *line,
   start_ptr = &line[matched[2].rm_so];
   end_ptr = &line[matched[2].rm_eo];
   if (parse_optional_name(parser_state, start_ptr, end_ptr,
-			  &(log_entry->client_identity))) {
+			  &(log_entry->client_identity),
+			  parser_state->client_identity, 1)) {
     return 1;
   }
 
   start_ptr = &line[matched[3].rm_so];
   end_ptr = &line[matched[3].rm_eo];
   if (parse_optional_name(parser_state, start_ptr, end_ptr,
-			  &(log_entry->auth_user))) {
+			  &(log_entry->auth_user),
+			  parser_state->auth_user, 1)) {
     return 1;
   }
 
@@ -220,89 +347,198 @@ int parse_common_log_entry(parser_state_t *parser_state, char *line,
   start_ptr = &line[matched[13].rm_so];
   end_ptr = &line[matched[13].rm_eo];
   if (((end_ptr-start_ptr) ==1 ) && (*start_ptr == '-')) { // "-"
-    if (log_entry->length) {
-      free(log_entry->length);
-      log_entry->length = NULL;
-    }
+    // Don't worry about free()ing the pointer, since it is always referrenced
+    // in parser_state->length, or NULL:
+    log_entry->length = NULL;
   } else {
-    if (!log_entry->length) {
-      log_entry->length = calloc(1, sizeof(long));
-      if (!log_entry->length) {
-	return 1;
-      }
-    }
+    log_entry->length = parser_state->length;
     *(log_entry->length) = strtol(start_ptr, &end_ptr, 10);
+  }
+
+  // Parse the fields that are defined only in the combined log format:
+
+  if (matched[14].rm_so != -1) {
+
+    start_ptr = &line[matched[15].rm_so];
+    end_ptr = &line[matched[15].rm_eo];
+    if (parse_optional_name(parser_state, start_ptr, end_ptr,
+			    &(log_entry->referrer),
+			    parser_state->referrer, 0)) {
+      return 1;
+    }
+
+    start_ptr = &line[matched[16].rm_so];
+    end_ptr = &line[matched[16].rm_eo];
+    if (parse_optional_name(parser_state, start_ptr, end_ptr,
+			    &(log_entry->user_agent),
+			    parser_state->user_agent, 0)) {
+      return 1;
+    }
+
   }
 
   return 0;
 }
 
-int parse_common_log_file(FILE *input, FILE *output) {
+int parse_log_file(long invoke_id, FILE *input, FILE *output) {
   char input_buffer[2048];
-  parser_state_t parser_state;
-  LogEntry_t *log_entry = NULL;
-  char output_header_buffer[2] = {0, 0};
-  char output_buffer[2048];
-  asn_enc_rval_t enc_ret;
+  parser_state_t* parser_state;
+  ReturnLogEntry_t *return_log_entry;
 
-  if (init_parser_state(&parser_state)) {
+  parser_state = alloc_parser_state();
+  if (!parser_state) {
+    perror("unable to initialize parser");
     return 1;
   }
 
-  log_entry = (LogEntry_t*) calloc(1, sizeof(LogEntry_t));
-  if (!log_entry) {
+  // First send back a sequence of ReturnLogEntry PDUs:
+  parser_state->supplier_pdu.present = SupplierPDU_PR_return_log_entry;
+  return_log_entry = &parser_state->supplier_pdu.choice.return_log_entry;
+  return_log_entry->linked_id = invoke_id;
+
+  input_buffer[0] = '\0';
+  while (!feof(input) && !ferror(input)) {
+    fgets(input_buffer, 2048, input);
+
+    if (parse_log_entry(parser_state, input_buffer)) {
+      goto error;
+    }
+
+    if (send_supplier_pdu(&parser_state->supplier_pdu, output, 0)) {
+      goto error;
+    }
+
+    // For debugging, replace the BER encoding above with:
+    //xer_fprint(stdout, &asn_DEF_SupplierPDU, &parser_state->supplier_pdu);
+  }
+
+  // Notify the end of file by sending back an EndOfFile PDU:
+  parser_state->supplier_pdu.present = SupplierPDU_PR_end_of_file;
+  parser_state->supplier_pdu.choice.end_of_file.invoke_id = invoke_id;
+
+  if (send_supplier_pdu(&parser_state->supplier_pdu, output, 1)) {
     goto error;
   }
 
-  input_buffer[0] = '\0';
-  while (!feof(input)) {
-    fgets(input_buffer, 2048, input);
 
-    if (parse_common_log_entry(&parser_state, input_buffer, log_entry)) {
-      goto error;
-    }
-
-    // Encode the log entry using BER and write it out:
-    enc_ret = der_encode_to_buffer(&asn_DEF_LogEntry, log_entry,
-				   output_buffer, 2048);
-    if (enc_ret.encoded == -1) {
-      goto error;
-    }
-
-    // Write out the size of the packet:
-    output_header_buffer[0] = (enc_ret.encoded >> 8) & 0xff;
-    output_header_buffer[1] = enc_ret.encoded & 0xff;
-    fwrite(output_header_buffer, 2, 1, stdout);
-    // Write out the data:
-    fwrite(output_buffer, enc_ret.encoded, 1, output);
-
-    // For debugging, replace the BER encoding above with:
-    //xer_fprint(stdout, &asn_DEF_LogEntry, log_entry);
-  }
-
-  fflush(output);
+  free_parser_state(parser_state);
   return 0;
 	
  error:
-  fflush(output);
-  if (log_entry) {
-    ASN_STRUCT_FREE(asn_DEF_LogEntry, log_entry);
+  if (parser_state) {
+    free_parser_state(parser_state);
   }
   return 1;
 }
 
-int main (int argc, char **argv) {
-  FILE *input = NULL;
-  FILE *output = stdout;
+int handle_parse_log_file(ParseLogFile_t *parse_log_file_req, FILE *op_output) {
+  UTF8String_t *filename_utf8;
+  char *filename;
+  FILE *input;
 
-  // TODO(Romain): Get the path from a command given from Erlang on stdin.
-  input = fopen("/tmp/access.log", "r");
-  if (!input) {
-    perror("cannot open log file");
-    exit(1);
+  // We assume that the filesystem accepts UTF-8-encoded filenames:
+  filename_utf8 = &parse_log_file_req->argument;
+  filename = malloc(filename_utf8->size + 1);
+  if (!filename) {
+    return 1;
+  }
+  memcpy(filename, filename_utf8->buf, filename_utf8->size);
+  filename[filename_utf8->size] = '\0';
+
+  input = fopen(filename, "r");
+  if (input) {
+    if (parse_log_file(parse_log_file_req->invoke_id, input, op_output)) {
+      goto error;
+    }
+  } else {
+    // Send back a CannotOpenFile PDU:
+    SupplierPDU_t supplier_pdu;
+    supplier_pdu.present = SupplierPDU_PR_cannot_open_file;
+    supplier_pdu.choice.cannot_open_file.invoke_id =
+      parse_log_file_req->invoke_id;
+
+    if (send_supplier_pdu(&supplier_pdu, op_output, 1)) {
+      goto error;
+    }
+  }
+  
+  free(filename);
+  return 0;
+
+ error:
+  free(filename);
+  return 1;
+}
+
+int handle_requests(FILE *op_input, FILE *op_output) {
+  int pdu_size;
+  int bytes_to_read;
+  int bytes_read;
+  char input_buffer[4096];
+  char *input_ptr;
+  asn_dec_rval_t rval;
+  ConsumerPDU_t *pdu;
+
+  while (!feof(op_input) && !ferror(op_input)) {
+
+
+    LOG("handle_requests: %s\n", "before reading PDU");
+
+    // Each PDU is prefixed with its size as a 16-bit integer. First
+    // read the size:
+    if (fread(input_buffer, 2, 1, op_input) == 1) {
+      pdu_size = ((unsigned char)input_buffer[0] << 8) | input_buffer[1];
+      LOG("handle_request: PDU size: %d\n", pdu_size);
+      if (pdu_size > 4096) {
+	LOG("handle_request: ERROR %s\n", "PDU size > 4096");
+	return 1;
+      }
+
+      // Then, read the PDU:
+      bytes_to_read = pdu_size;
+      input_ptr = input_buffer;
+      while (!feof(op_input) && !ferror(op_input) && (bytes_to_read > 0)) {
+	bytes_read = fread(input_ptr, 1, pdu_size, op_input);
+	LOG("handle_request: read %d bytes\n", bytes_read);
+	input_ptr += bytes_read;
+	bytes_to_read -= bytes_read;
+      }
+      if (bytes_to_read == 0) {
+	// Decode the PDU:
+	pdu = NULL;
+	rval = ber_decode(NULL, &asn_DEF_ConsumerPDU, (void**)&pdu,
+			  input_buffer, pdu_size);
+	if (rval.code == RC_OK) {
+	  LOG("handle_request: %s\n", "PDU decoded");
+	  LOG("handle_request: present: %d\n", pdu->present);
+	  if (pdu->present == ConsumerPDU_PR_parse_log_file) {
+	    LOG("handle_request: %s\n", "PDU is of type ParseLogFile");
+	    if (handle_parse_log_file(&pdu->choice.parse_log_file, op_output)) {
+	      LOG("handle_request: ERROR %s\n", "handle_parse_log_file failed");
+	      return 1;
+	    }
+	  } else {
+	    LOG("handle_request: ERROR %s\n",
+		"PDU is not of type ParseLogFile");
+	    return 1;
+	  }
+	  ASN_STRUCT_FREE(asn_DEF_ConsumerPDU, pdu);
+        } else {
+	  LOG("handle_request: ERROR %s\n", "PDU not decoded");
+	  ASN_STRUCT_FREE(asn_DEF_ConsumerPDU, pdu);
+	  return 1;
+	}
+      }
+    }
+  }
+  if (ferror(op_input)) {
+    return 1;
   }
 
-  return parse_common_log_file(input, output);
-
   return 0;
+}
+
+int main (int argc, char **argv) {
+  LOGFILE = fopen("/tmp/logtilla-parser.log", "w");
+  return handle_requests(stdin, stdout);
 }
