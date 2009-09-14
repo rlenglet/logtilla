@@ -41,7 +41,7 @@
 %% This callback is similar to the {@link gen_server:handle_call/3}
 %% callback.
 %% ```handle_call(Msg::any(), {From::pid(), Tag::any()},
-%%                State::any()} ->
+%%                State::any()) ->
 %%        {'reply', Reply::any(), NewState::any()}
 %%        | {'reply', Reply::any(), NewState::any(), Timeout::timeout()}
 %%        | {'noreply', NewState::any()}
@@ -52,7 +52,7 @@
 %% `handle_cast/2': Handle an application_specific cast.
 %% This callback is similar to the {@link gen_server:handle_cast/2}
 %% callback.
-%% ```handle_cast(Msg::any(), State::any()} ->
+%% ```handle_cast(Msg::any(), State::any()) ->
 %%        {'noreply', NewState::any()}
 %%        | {'noreply', NewState::any(), Timeout::timeout()}
 %%        | {'stop', Reason::any(), NewState::any()}.'''

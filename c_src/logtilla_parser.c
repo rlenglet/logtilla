@@ -26,9 +26,6 @@
 #include "ConsumerPDU.h"
 #include "SupplierPDU.h"
 
-static FILE *LOGFILE;
-#define LOG(f, a) fprintf(LOGFILE, f, a); fflush(LOGFILE)
-
 int send_supplier_pdu(SupplierPDU_t *supplier_pdu, FILE *output, int flush) {
   char output_header_buffer[2] = {0, 0};
   char output_buffer[2048];
@@ -480,17 +477,11 @@ int handle_requests(FILE *op_input, FILE *op_output) {
   ConsumerPDU_t *pdu;
 
   while (!feof(op_input) && !ferror(op_input)) {
-
-
-    LOG("handle_requests: %s\n", "before reading PDU");
-
     // Each PDU is prefixed with its size as a 16-bit integer. First
     // read the size:
     if (fread(input_buffer, 2, 1, op_input) == 1) {
       pdu_size = ((unsigned char)input_buffer[0] << 8) | input_buffer[1];
-      LOG("handle_request: PDU size: %d\n", pdu_size);
       if (pdu_size > 4096) {
-	LOG("handle_request: ERROR %s\n", "PDU size > 4096");
 	return 1;
       }
 
@@ -499,7 +490,6 @@ int handle_requests(FILE *op_input, FILE *op_output) {
       input_ptr = input_buffer;
       while (!feof(op_input) && !ferror(op_input) && (bytes_to_read > 0)) {
 	bytes_read = fread(input_ptr, 1, pdu_size, op_input);
-	LOG("handle_request: read %d bytes\n", bytes_read);
 	input_ptr += bytes_read;
 	bytes_to_read -= bytes_read;
       }
@@ -509,22 +499,16 @@ int handle_requests(FILE *op_input, FILE *op_output) {
 	rval = ber_decode(NULL, &asn_DEF_ConsumerPDU, (void**)&pdu,
 			  input_buffer, pdu_size);
 	if (rval.code == RC_OK) {
-	  LOG("handle_request: %s\n", "PDU decoded");
-	  LOG("handle_request: present: %d\n", pdu->present);
 	  if (pdu->present == ConsumerPDU_PR_parse_log_file) {
-	    LOG("handle_request: %s\n", "PDU is of type ParseLogFile");
 	    if (handle_parse_log_file(&pdu->choice.parse_log_file, op_output)) {
-	      LOG("handle_request: ERROR %s\n", "handle_parse_log_file failed");
 	      return 1;
 	    }
 	  } else {
-	    LOG("handle_request: ERROR %s\n",
 		"PDU is not of type ParseLogFile");
 	    return 1;
 	  }
 	  ASN_STRUCT_FREE(asn_DEF_ConsumerPDU, pdu);
         } else {
-	  LOG("handle_request: ERROR %s\n", "PDU not decoded");
 	  ASN_STRUCT_FREE(asn_DEF_ConsumerPDU, pdu);
 	  return 1;
 	}
@@ -539,6 +523,5 @@ int handle_requests(FILE *op_input, FILE *op_output) {
 }
 
 int main (int argc, char **argv) {
-  LOGFILE = fopen("/tmp/logtilla-parser.log", "w");
   return handle_requests(stdin, stdout);
 }

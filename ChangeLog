@@ -1,3 +1,10 @@
+2009-09-14  Romain Lenglet  <romain.lenglet@berabera.info>
+
+	* src/gen_log_analyzer.erl: Fixed function specs typos in edoc
+	comments.
+
+	* c_src/logtilla_parser.c: Remove leftover debugging code.
+
 2009-09-13  Romain Lenglet  <romain.lenglet@berabera.info>
 
 	* src/gen_log_analyzer.erl, src/logtilla_test.erl: Added type
