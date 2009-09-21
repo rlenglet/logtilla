@@ -504,7 +504,6 @@ int handle_requests(FILE *op_input, FILE *op_output) {
 	      return 1;
 	    }
 	  } else {
-		"PDU is not of type ParseLogFile");
 	    return 1;
 	  }
 	  ASN_STRUCT_FREE(asn_DEF_ConsumerPDU, pdu);

@@ -82,6 +82,9 @@
 %%    gen_log_analyzer:stop(Pid).'''
 
 -module(gen_log_analyzer).
+-copyright("2009 Google Inc.").
+-author("Romain Lenglet <romain.lenglet@berabera.info>").
+
 -behaviour(gen_server).
 
 -export([start/3, start/4, start_link/3, start_link/4,
@@ -379,6 +382,7 @@ handle_info({Port, Msg}, State) when is_port(Port), Port =:= State#state.port ->
 terminate(Reason, State) ->
     Port = State#state.port,
     port_close(Port),
+    terminate_operations(Reason, dict:to_list(State#state.op_states)),
     Mod = State#state.mod,
     State1 = State#state.state,
     Mod:terminate(Reason, State1).
@@ -401,6 +405,18 @@ code_change(OldVsn, State, Extra) ->
 %% -----------------------------------------------------------------------------
 %% === Internal implementation ===
 %% -----------------------------------------------------------------------------
+
+%% @doc Terminate all pending operations in case this process is terminated.
+
+-spec terminate_operations(any(), [{integer(), #op_state{}}]) ->
+    ok.
+
+terminate_operations(_Reason, []) ->
+    ok;
+terminate_operations(Reason, [{_Key, #op_state{pid=Pid, tag=Tag}} | Tail]) ->
+    % Terminate the gen_server call with {'error', {'stopped', Reason}}:
+    gen_server:reply({Pid, Tag}, {error, {stopped, Reason}}),
+    terminate_operations(Reason, Tail).
 
 %% @doc Handle a message coming from the parser port program.
 

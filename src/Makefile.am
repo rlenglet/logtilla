@@ -41,8 +41,10 @@ gen_log_analyzer.html
 .erl.beam:
 	$(ERLC) $(ERLCFLAGS) -pa . -b beam $<
 
-.erl.html:
-	$(ERL) -noshell -run edoc_run files "$<"
+index.html: $(dist_erlsrc_DATA)
+	$(ERL) -noshell -run edoc_run files "[\"$<\"]" \
+	"[{application,'$(PACKAGE_STRING)'},{source_path,\"$(srcdir)\"},\
+	{dir,\".\"}]"
 
 WebAccessLogParserOperations.erl WebAccessLogParserOperations.beam \
 WebAccessLogParserOperations.hrl WebAccessLogParserOperations.asn1db: \

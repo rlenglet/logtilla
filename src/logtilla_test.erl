@@ -20,6 +20,9 @@
 %% using the gen_log_analyzer behaviour.
 
 -module(logtilla_test).
+-copyright("2009 Google Inc.").
+-author("Romain Lenglet <romain.lenglet@berabera.info>").
+
 -behaviour(gen_log_analyzer).
 
 -export([start_link/0, get_stats/1]).

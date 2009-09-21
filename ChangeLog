@@ -1,13 +1,26 @@
+2009-09-21  Romain Lenglet  <romain.lenglet@berabera.info>
+
+	* src/gen_log_analyzer.erl, src/logtilla_test.erl: Add -author and
+	-copyright module attributes.
+
+	* src/Makefile.am (index.html): Fix invocation of EDoc.
+
+	* src/gen_log_analyzer.erl (terminate): Terminate all pending
+	gen_server calls on process termination.
+
+	* c_src/logtilla_parser.c (handle_requests): Fix typo leftover
+	from debugging code.
+
 2009-09-14  Romain Lenglet  <romain.lenglet@berabera.info>
 
-	* src/gen_log_analyzer.erl: Fixed function specs typos in edoc
+	* src/gen_log_analyzer.erl: Fix function specs typos in edoc
 	comments.
 
 	* c_src/logtilla_parser.c: Remove leftover debugging code.
 
 2009-09-13  Romain Lenglet  <romain.lenglet@berabera.info>
 
-	* src/gen_log_analyzer.erl, src/logtilla_test.erl: Added type
+	* src/gen_log_analyzer.erl, src/logtilla_test.erl: Add type
 	specifications and EDoc comments. Added the stop/1 function.
 	* src/Makefile.am: Generate doc files.
 
