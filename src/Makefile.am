@@ -14,7 +14,7 @@
 # limitations under the License.
 
 erlsrcdir = $(ERLANG_INSTALL_LIB_DIR_logtilla)/src
-dist_erlsrc_DATA = gen_log_analyzer.erl logtilla_test.erl
+dist_erlsrc_DATA = gen_log_analyzer.erl log_geoip_stats.erl logtilla_test.erl
 nodist_erlsrc_DATA = WebAccessLogParserOperations.erl WebAccessLog.erl
 
 erlincdir = $(ERLANG_INSTALL_LIB_DIR_logtilla)/include
@@ -23,10 +23,11 @@ WebAccessLogParserOperations.hrl WebAccessLogParserOperations.asn1db \
 ../asn1/WebAccessLog.asn1 WebAccessLog.hrl WebAccessLog.asn1db 
 
 erlbeamdir = $(ERLANG_INSTALL_LIB_DIR_logtilla)/ebin
-nodist_erlbeam_DATA = gen_log_analyzer.beam logtilla_test.beam \
-WebAccessLog.beam WebAccessLog.asn1db
+nodist_erlbeam_DATA = gen_log_analyzer.beam log_geoip_stats.beam \
+logtilla_test.beam WebAccessLog.beam WebAccessLog.asn1db
 
 gen_log_analyzer.beam: WebAccessLogParserOperations.hrl
+log_geoip_stats.beam: WebAccessLog.hrl
 logtilla_test.beam: WebAccessLog.hrl
 
 CLEANFILES = $(nodist_erlbeam_DATA) WebAccessLogParserOperations.erl \

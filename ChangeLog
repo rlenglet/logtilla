@@ -1,5 +1,8 @@
 2009-09-21  Romain Lenglet  <romain.lenglet@berabera.info>
 
+	* src/log_geoip_stats.erl, src/Makefile.am: Add module for
+	analyzing the geolocations of web clients using libgeoip-erlang.
+
 	* src/gen_log_analyzer.erl, src/logtilla_test.erl: Add -author and
 	-copyright module attributes.
 
